@@ -45,9 +45,30 @@ type State = {
             |> Scoreboard
           GameState = WaitingForRoll None }
 
+module Storage =
+    open Fable.Import
+    open Thoth.Json
+
+    let storage = Browser.WebStorage.localStorage
+    let [<Literal>] StorageKey = "jamb"
+
+    let (encoder: Encoder<State>) = Encode.Auto.generateEncoder()
+    let (decoder: Decoder<State>) = Decode.Auto.generateDecoder()
+
+    let load () =
+        storage.getItem StorageKey
+        |> Decode.fromString decoder
+        |> function | Ok value -> Some value | _ -> None
+
+    let save state =
+        let json = encoder state |> Encode.toString 2
+        storage.setItem(StorageKey, json)
+
 let init () =
-    //State.Empty DiceSet.defaultConfig, Cmd.none
-    State.Test, Cmd.none
+    let state =
+        Storage.load()
+        |> Option.defaultValue (State.Empty DiceSet.defaultConfig)
+    state, Cmd.none
 
 type Message =
 | StartRolling
@@ -205,6 +226,10 @@ let diceClicked state diceId =
 let toggleDiceStyle state =
     { state with DiceSet = DiceSet.toggleStyle state.DiceSet }, Cmd.none
 
+let saveStateToLocalStorage (state, cmd) =
+    Storage.save state
+    state, cmd
+
 let update message state =
     let ignore = state, Cmd.none
 
@@ -215,6 +240,7 @@ let update message state =
     | DiceClicked diceId -> diceClicked state diceId
     | CellClicked (colId, rowId) -> cellClicked state (colId, rowId)
     | ToggleDiceStyle -> toggleDiceStyle state
+    |> saveStateToLocalStorage
 
 let icon (faIcon: string) =
     Bulma.icon [
