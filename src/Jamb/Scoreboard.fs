@@ -278,15 +278,15 @@ let render (scoreBoard: Scoreboard) possibleScores calledCell onCellClicked =
                 let header (optIcon: string option) =
                     Html.th [
                         match optIcon with
-                        | Some faIcon -> prop.children [ Bulma.icon [ Bulma.icon.isMedium; prop.classes ["fas"; faIcon] ] ]
+                        | Some faIcon -> prop.children [ Bulma.icon [ Bulma.icon.isMedium; prop.classes [ Fa.Fa; faIcon; Fa.Fa2X ] ] ]
                         | _ -> ()
                         prop.style [ style.textAlign.center ] ]
                 Html.tr [
                     header None
-                    header <| Some "fa-long-arrow-alt-down"
-                    header <| Some "fa-long-arrow-alt-up"
-                    header <| Some "fa-arrows-alt-v"
-                    header <| Some "fa-check"
+                    header <| Some Fa.FaArrowCircleDown
+                    header <| Some Fa.FaArrowCircleUp
+                    header <| Some Fa.FaCircle
+                    header <| Some Fa.FaCheckCircle
                 ]
             ]
             Html.tableBody [
@@ -296,7 +296,7 @@ let render (scoreBoard: Scoreboard) possibleScores calledCell onCellClicked =
                         prop.children [
                             Bulma.icon [
                                 Bulma.icon.isLarge
-                                prop.className "fas fa-trophy"
+                                prop.classes [ Fa.Fa; Fa.FaTrophy; Fa.Fa2X ]
                             ]
                         ]
                         color.isInfo
