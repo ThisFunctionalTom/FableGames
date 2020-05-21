@@ -1,0 +1,236 @@
+$diceSetWidth: 48em;
+$diceCount: 6;
+$diceSize: $diceSetWidth/$diceCount/2;
+$pipSize: $diceSize/5;
+$diceShadow: round($pipSize/5) + 1;
+$pipShadow: round($diceShadow/2) + 1;
+
+.dice-set {
+  display: grid;
+  grid-template-columns: repeat($diceCount/2, 1fr);
+  width: $diceSetWidth/2;
+  height: $diceSize * 4;
+
+  perspective: ($diceSize * 15);
+  perspective-origin: 50% 50%;
+}
+
+.dice {
+  margin: ($diceSize/2);
+  position: relative;
+
+  transform-style: preserve-3d;
+}
+
+.dice.even-roll:not(.saved) {
+  transition: transform 1.5s ease-out;
+}
+
+.dice.odd-roll:not(.saved) {
+  transition: transform 1.2s ease-out;
+}
+
+.face {
+  position: absolute;
+}
+
+.face.front {
+  transform: translateZ($diceSize/2);
+}
+
+.face.back {
+  transform: rotateX(-180deg) translateZ($diceSize/2);
+}
+
+.face.right {
+  transform: rotateY(90deg) translateZ($diceSize/2);
+}
+
+.face.left {
+  transform: rotateY(-90deg) translateZ($diceSize/2);
+}
+
+.face.top {
+  transform: rotateX(90deg) translateZ($diceSize/2);
+}
+
+.face.bottom {
+  transform: rotateX(-90deg) translateZ($diceSize/2);
+}
+
+.face {
+  width: $diceSize;
+  height: $diceSize;
+
+  border: solid 2px #333;
+  border-radius: 10%;
+}
+
+.dice.classic {
+  .face {
+    background-color: #e7e7e7;
+    box-shadow: 
+      inset 0 5px white, 
+      inset 0 -5px #bbb, 
+      inset 5px 0 #d7d7d7,
+      inset -5px 0 #d7d7d7;
+    border-radius: 10%;
+  }
+  .pip {
+    background-color: #333;
+    box-shadow: inset 0 3px #111, inset 0 -3px #555;
+  }
+}
+
+.dice.classic.saved {
+  .face {
+    background-color: royalblue;
+    box-shadow: 
+      inset 0 5px lighten(royalblue, 10%), 
+      inset 0 -5px darken(royalblue, 30%), 
+      inset 5px 0 darken(royalblue, 10%),
+      inset -5px 0 darken(royalblue, 10%);
+    border-radius: 10%;
+  }
+  .pip {
+    background-color: #333;
+    box-shadow: inset 0 3px #111, inset 0 -3px #555;
+  }
+}
+
+.dice.saved {
+  .face {
+    background: white;
+  }
+  .pip {
+    background-color: #222;
+  }
+}
+
+.dice.red {
+  .face {
+    background: hsla(0, 85%, 50%, 1);
+  }
+  .pip {
+    background-color: #222;
+  }
+}
+
+.dice.green {
+  .face {
+    background: hsla(120, 100%, 25%, 1);
+  }
+  .pip {
+    background-color: #222;
+  }
+}
+
+.dice.blue {
+  .face {
+    background: hsla(180, 100%, 25%, 1);
+  }
+  .pip {
+    background-color: #222;
+  }
+}
+
+.dice.yellow {
+  .face {
+    background: hsla(60, 100%, 50%, 1);
+  }
+  .pip {
+    background-color: #333;
+    //box-shadow: inset 0 $pipShadow #777, inset 0 (-$pipShadow) #777;
+  }
+}
+
+.dice.pink {
+  .face {
+    background: hsla(300, 100%, 50%, 1);
+  }
+  .pip {
+    background-color: #222;
+  }
+}
+
+.dice.gray {
+  .face {
+    background: hsla(0, 0%, 50%, 1);
+  }
+  .pip {
+    background-color: #222;
+  }
+}
+
+.face {
+  display: grid;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  grid-template-areas:
+    "a . c"
+    "e g f"
+    "d . b";
+}
+
+.pip:nth-child(odd):last-child {
+  grid-area: g;
+}
+
+.pip:nth-child(2) {
+  grid-area: b;
+}
+.pip:nth-child(3) {
+  grid-area: c;
+}
+.pip:nth-child(4) {
+  grid-area: d;
+}
+.pip:nth-child(5) {
+  grid-area: e;
+}
+.pip:nth-child(6) {
+  grid-area: f;
+}
+
+.pip {
+  width: $pipSize;
+  height: $pipSize;
+  border-radius: 50%;
+  margin: auto;
+}
+
+.even-roll[data-roll="1"] {
+  transform: rotateX(360deg) rotateY(720deg) rotateZ(360deg);
+}
+.even-roll[data-roll="2"] {
+  transform: rotateX(360deg) rotateY(810deg) rotateZ(360deg);
+}
+.even-roll[data-roll="3"] {
+  transform: rotateX(450deg) rotateY(720deg) rotateZ(360deg);
+}
+.even-roll[data-roll="4"] {
+  transform: rotateX(270deg) rotateY(720deg) rotateZ(360deg);
+}
+.even-roll[data-roll="5"] {
+  transform: rotateX(360deg) rotateY(630deg) rotateZ(360deg);
+}
+.even-roll[data-roll="6"] {
+  transform: rotateX(360deg) rotateY(900deg) rotateZ(360deg);
+}
+.odd-roll[data-roll="1"] {
+  transform: rotateX(-360deg) rotateY(-720deg) rotateZ(-360deg);
+}
+.odd-roll[data-roll="2"] {
+  transform: rotateX(-360deg) rotateY(-630deg) rotateZ(-360deg);
+}
+.odd-roll[data-roll="3"] {
+  transform: rotateX(-270deg) rotateY(-720deg) rotateZ(-360deg);
+}
+.odd-roll[data-roll="4"] {
+  transform: rotateX(-450deg) rotateY(-720deg) rotateZ(-360deg);
+}
+.odd-roll[data-roll="5"] {
+  transform: rotateX(-360deg) rotateY(-810deg) rotateZ(-360deg);
+}
+.odd-roll[data-roll="6"] {
+  transform: rotateX(-360deg) rotateY(-900deg) rotateZ(-360deg);
+}

@@ -47,11 +47,10 @@ let navBrand =
         prop.classes [ b.NavbarItem; b.Title; b.Is4 ]
         prop.text "Fable Games" ]
 
-let root currentPage =
+let root navbarMenu =
     Bulma.navbar [
         color.isInfo
         prop.children [
             Bulma.container [
                 Bulma.navbarBrand.div [ navBrand ]
-                Bulma.navbarMenu [
-                    Bulma.navbarStart.div navButtons ] ] ] ]
+                navbarMenu ] ] ]

@@ -23,23 +23,23 @@ let urlUpdate (result : Page option) model =
         { model with CurrentPage = page }, []
 
 let init result =
-    let (counter, counterCmd) = Counter.State.init()
+    let (jamb, jambCmd) = Jamb.Game.init()
     let (home, homeCmd) = Home.State.init()
     let (model, cmd) =
         urlUpdate result
           { CurrentPage = Home
-            Counter = counter
+            Jamb = jamb
             Home = home }
 
     model, Cmd.batch [ cmd
-                       Cmd.map JambMsg counterCmd
+                       Cmd.map JambMsg jambCmd
                        Cmd.map HomeMsg homeCmd ]
 
 let update msg model =
     match msg with
     | JambMsg msg ->
-        let (counter, counterCmd) = Counter.State.update msg model.Counter
-        { model with Counter = counter }, Cmd.map JambMsg counterCmd
+        let (jamb, counterCmd) = Jamb.Game.update msg model.Jamb
+        { model with Jamb = jamb }, Cmd.map JambMsg counterCmd
     | HomeMsg msg ->
         let (home, homeCmd) = Home.State.update msg model.Home
         { model with Home = home }, Cmd.map HomeMsg homeCmd

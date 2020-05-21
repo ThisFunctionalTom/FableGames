@@ -3,10 +3,10 @@ module App.Types
 open Global
 
 type Msg =
-    | JambMsg of Counter.Types.Msg
+    | JambMsg of Jamb.Game.Message
     | HomeMsg of Home.Types.Msg
 
 type Model =
     { CurrentPage: Page
-      Counter: Counter.Types.Model
+      Jamb: Jamb.Game.State
       Home: Home.Types.Model }
