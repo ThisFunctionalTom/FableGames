@@ -28,11 +28,7 @@ let root model dispatch =
 
     Html.div [
         Navbar.View.root (navbarMenu model.CurrentPage)
-        Bulma.section [
-            Bulma.container [
-                Bulma.columns [
-                    Bulma.column [
-                        pageHtml model.CurrentPage ] ] ] ] ]
+        Bulma.section [ Bulma.container [ pageHtml model.CurrentPage ] ] ]
 
 open Elmish.React
 open Elmish.Debug

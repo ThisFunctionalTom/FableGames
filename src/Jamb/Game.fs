@@ -192,13 +192,10 @@ let update message state =
     | CellClicked (colId, rowId) -> cellClicked state (colId, rowId)
     | ToggleDiceStyle -> toggleDiceStyle state
 
-let largeIcon faIcon =
-    Bulma.icon [ icon.isLarge; prop.classes ["fas"; faIcon ] ]
-
 let mediumIcon (faIcon: string) =
     Bulma.icon [
-        prop.id faIcon
-        icon.isMedium
+        //prop.id faIcon
+        //icon.isMedium
         prop.classes ["fas"; faIcon ] ]
 
 let renderScoreboard (state: State) dispatch =
@@ -252,29 +249,17 @@ let renderRollButton state dispatch =
 let navbarMenu (state: State) (dispatch: Message -> unit) =
     Bulma.navbarMenu [
         Bulma.navbarStart.div [
+            Bulma.navbarItem.div [
             Bulma.button.button [
                 color.isLink
                 prop.children [ mediumIcon "fa-cube" ]
-                prop.onClick (fun _ -> dispatch ToggleDiceStyle) ] ]
+                prop.onClick (fun _ -> dispatch ToggleDiceStyle) ] ] ]
         Bulma.navbarEnd.div [
+            Bulma.navbarItem.div [
             Bulma.button.button [
                 color.isDanger
                 prop.children [ mediumIcon "fa-trash-alt" ]
-                prop.onClick (fun _ -> dispatch NewGame) ] ] ]
-
-let renderNavbar (state: State) (dispatch: Message -> unit) =
-    Bulma.navbar [
-        title.isSpaced
-        color.isInfo
-        prop.children [
-            Bulma.navbarBrand.div [
-                Bulma.navbarItem.div [
-                    prop.style [ style.color color.darkRed ]
-                    prop.children [
-                        largeIcon "fa-dice"
-                        Bulma.title.h1 "Jamb" ] ] ]
-            navbarMenu state dispatch ]
-    ]
+                prop.onClick (fun _ -> dispatch NewGame) ] ] ] ]
 
 let renderState state =
     Html.div [
