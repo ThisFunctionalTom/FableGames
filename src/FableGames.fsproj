@@ -4,6 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Global.fs" />
+    <Compile Include="Extensions.fs" />
     <Compile Include="Info/View.fs" />
     <Compile Include="Jamb/DiceSet.fs" />
     <Compile Include="Jamb/Scoreboard.fs" />

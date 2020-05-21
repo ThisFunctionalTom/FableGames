@@ -6,6 +6,10 @@ open Scoreboard
 open DiceSet
 open Feliz
 open Feliz.Bulma
+open Feliz.Bulma.Switch
+open Zanaptak.TypedCssClasses
+
+type Fa = CssClasses<"../node_modules/@fortawesome/fontawesome-free/css/fontawesome.min.css", Naming.PascalCase>
 
 type RollingState = {
     CalledRow: RowId option
@@ -192,11 +196,9 @@ let update message state =
     | CellClicked (colId, rowId) -> cellClicked state (colId, rowId)
     | ToggleDiceStyle -> toggleDiceStyle state
 
-let mediumIcon (faIcon: string) =
+let icon (faIcon: string) =
     Bulma.icon [
-        //prop.id faIcon
-        //icon.isMedium
-        prop.classes ["fas"; faIcon ] ]
+        Html.i [ prop.classes [ Fa.Fa; faIcon ] ] ]
 
 let renderScoreboard (state: State) dispatch =
     match state.GameState with
@@ -212,7 +214,7 @@ let renderGameOver score =
 
 let rollButton rolling canRoll visible faIcon dispatch =
     Bulma.button.a [
-        prop.children [ mediumIcon faIcon ]
+        prop.children [ icon faIcon ]
         button.isLarge
         button.isFullWidth
         if canRoll then button.isActive
@@ -246,20 +248,33 @@ let renderRollButton state dispatch =
     | WaitingForCall x -> buttons x.Rolled false false true false false
     | GameOver -> buttons false false false false false true
 
+let diceStyleSwitch style dispatch =
+    Bulma.navbarItem.div [
+        Bulma.field.div [
+            prop.onClick (fun _ -> dispatch ToggleDiceStyle)
+            prop.children [
+                Html.label [
+                    prop.htmlFor "dice-style"
+                    prop.children [ icon Fa.FaSquare; Html.text " " ] ]
+                Switch.checkbox [
+                    prop.id "dice.style"
+                    switch.isRounded
+                    prop.isChecked (style <> Flat)
+                    color.isSuccess
+                ]
+                Html.label [
+                    prop.htmlFor "dice-style"
+                    prop.children [ icon Fa.FaCube ] ] ] ] ]
+
 let navbarMenu (state: State) (dispatch: Message -> unit) =
     Bulma.navbarMenu [
-        Bulma.navbarStart.div [
-            Bulma.navbarItem.div [
-            Bulma.button.button [
-                color.isLink
-                prop.children [ mediumIcon "fa-cube" ]
-                prop.onClick (fun _ -> dispatch ToggleDiceStyle) ] ] ]
         Bulma.navbarEnd.div [
             Bulma.navbarItem.div [
-            Bulma.button.button [
-                color.isDanger
-                prop.children [ mediumIcon "fa-trash-alt" ]
-                prop.onClick (fun _ -> dispatch NewGame) ] ] ] ]
+                diceStyleSwitch state.DiceSet.Style dispatch
+                Bulma.button.button [
+                    color.isDanger
+                    prop.children [ icon Fa.FaPlay ]
+                    prop.onClick (fun _ -> dispatch NewGame) ] ] ] ]
 
 let renderState state =
     Html.div [
