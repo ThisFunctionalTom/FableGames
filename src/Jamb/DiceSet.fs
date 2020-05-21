@@ -81,7 +81,7 @@ module DiceSet =
     let config (diceSet: DiceSet) =
         { NrOfDice = diceSet.Dice.Length; Style = diceSet.Style }
 
-    let defaultConfig = { NrOfDice = 6; Style = Style.Flat }
+    let defaultConfig = { NrOfDice = 6; Style = Style.Cube Even }
 
 let getDots diceSet =
     diceSet.Dice
