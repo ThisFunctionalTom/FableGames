@@ -31,7 +31,7 @@ let games =
         prop.className "features"
         prop.children [
             card Fa.Solid.Dice "Jamb" "Jamb is a dice game like Yahtzee but with somewhat different rules." "jamb"
-            card Fa.Solid.Dice "Tetirs" "TODO: Write description" "tetris" ] ]
+            card Fa.Solid.Dice "Tetris" "TODO: Write description" "tetris" ] ]
 
 let intro =
     Bulma.column [
@@ -46,5 +46,5 @@ let intro =
               [ str """I made this game for fun. I hope you will enjoy playing them.
                      Also, if you like to see how it is implemented go here.""" ] ] ]
 
-let root model dispatch =
+let view =
   Html.div [ intro; games ]

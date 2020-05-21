@@ -19,7 +19,7 @@ let root model dispatch =
         match page with
         | About -> Info.View.root
         | Jamb -> Counter.View.root model.Counter (JambMsg >> dispatch)
-        | Home -> Home.View.root model.Home (HomeMsg >> dispatch)
+        | Home -> Home.View.view
 
     Html.div [
         Navbar.View.root model.CurrentPage
