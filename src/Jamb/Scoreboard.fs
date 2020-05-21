@@ -3,6 +3,9 @@ module Jamb.Scoreboard
 open Feliz
 open Feliz.Bulma
 open Feliz.Bulma.Operators
+open Zanaptak.TypedCssClasses
+
+type Fa = CssClasses<"../node_modules/@fortawesome/fontawesome-free/css/fontawesome.min.css", Naming.PascalCase>
 
 type DiceDots = int
 
@@ -192,21 +195,21 @@ let render (scoreBoard: Scoreboard) possibleScores calledCell onCellClicked =
     let cols = [ Down; Up; Free; Call ]
 
     let icon faIcon =
-        Bulma.icon [ prop.classes ["fas"; faIcon ] ]
+        Bulma.icon [ prop.classes [ Fa.Fas; faIcon ] ]
 
     let renderCell colId row =
         match row with
         | CellRow rowId ->
             let score = scoreBoard.GetScore (colId, rowId)
-            let scoreTxt =
+            let renderScore  =
                 score
-                |> Option.map (function | 0 -> "X" | value -> string value)
-                |> Option.defaultValue "-"
+                |> Option.map (function | 0 -> icon Fa.FaTimes | value -> Html.text value)
+                |> Option.defaultValue (Html.text " ")
             let canBeScored = possibleScores |> List.contains (colId, rowId)
             let isCalled = colId = Call && calledCell = Some rowId
 
             Html.td [
-                prop.text scoreTxt
+                prop.children renderScore
                 prop.style
                     [ if canBeScored then style.cursor.pointer else style.cursor.notAllowed
                       if canBeScored then style.backgroundColor.beige

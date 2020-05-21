@@ -273,7 +273,7 @@ let navbarMenu (state: State) (dispatch: Message -> unit) =
                 diceStyleSwitch state.DiceSet.Style dispatch
                 Bulma.button.button [
                     color.isDanger
-                    prop.children [ icon Fa.FaPlay ]
+                    prop.children [ icon Fa.FaFastBackward ]
                     prop.onClick (fun _ -> dispatch NewGame) ] ] ] ]
 
 let view (state: State) (dispatch: Message -> unit) =
