@@ -9,7 +9,6 @@ open Types
 
 let pageParser: Parser<Page->Page,Page> =
     oneOf [
-        map About (s PageHash.About)
         map Jamb (s PageHash.Jamb)
         map Home (s PageHash.Home)
     ]

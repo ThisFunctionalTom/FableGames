@@ -16,13 +16,11 @@ open Feliz.Bulma
 let root model dispatch =
     let navbarMenu page =
         match page with
-        | About -> Bulma.navbarMenu [ Html.text "About" ]
         | Jamb -> Jamb.Game.navbarMenu model.Jamb (JambMsg >> dispatch)
-        | Home -> Bulma.navbarMenu [ Html.text "Home" ]
+        | Home -> Bulma.navbarMenu [ ]
 
     let pageHtml page =
         match page with
-        | About -> Info.View.root
         | Jamb -> Jamb.Game.view model.Jamb (JambMsg >> dispatch)
         | Home -> Home.View.view
 

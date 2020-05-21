@@ -9,43 +9,15 @@ open Fable.FontAwesome
 open Zanaptak.TypedCssClasses
 
 type Fa = CssClasses<"../node_modules/@fortawesome/fontawesome-free/css/fontawesome.min.css", Naming.PascalCase>
-type b = CssClasses<"../node_modules/bulma/css/bulma.min.css", Naming.PascalCase>
-
-let icon faIcon =
-    Bulma.icon [
-        Html.i [ prop.classes [ Fa.Fa; faIcon ] ]
-    ]
-
-let navButton (href: string) faIcon (txt: string) =
-    Bulma.button.a [
-        color.isWhite
-        button.isOutlined
-        prop.href href
-        prop.children [
-            icon faIcon
-            Html.span txt ]
-    ]
-
-let navButtons' =
-    Html.span
-        [ prop.classes [ b.NavbarItem ]
-          prop.children [
-            Html.div [
-                prop.classes [ b.Field; b.IsGrouped ]
-                prop.children [ navButton "#jamb" Fa.FaDice "Jamb" ] ] ] ]
-
-let navButtons =
-    Bulma.navbarItem.div [
-        Bulma.field.div [
-                prop.children [
-                navButton "#jamb" Fa.FaDice "Jamb"
-                navButton "#tetris" Fa.FaCubes "Tetris" ] ] ]
+//type Bulma = CssClasses<"../node_modules/bulma/css/bulma.min.css", Naming.PascalCase>
 
 let navBrand =
-    Html.a [
-        prop.href "#home"
-        prop.classes [ b.NavbarItem; b.Title; b.Is4 ]
-        prop.text "Fable Games" ]
+    Bulma.navbarBrand.div [
+        Bulma.navbarItem.a [
+            prop.href "#home"
+            size.isSize4
+        //prop.classes [ Bulma.NavbarItem; Bulma.Title; Bulma.Is4 ]
+            prop.text "Fable Games" ] ]
 
 let root navbarMenu =
     Bulma.navbar [

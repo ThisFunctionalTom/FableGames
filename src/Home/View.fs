@@ -8,30 +8,39 @@ open Fulma
 open Fable.FontAwesome
 open Feliz
 open Feliz.Bulma
-open Types
+open Feliz.Bulma.Operators
+open Zanaptak.TypedCssClasses
 
-let card icon heading body link =
+type Fa = CssClasses<"../node_modules/@fortawesome/fontawesome-free/css/fontawesome.min.css", Naming.PascalCase>
+
+let icon faIcon =
+    Bulma.icon [
+        prop.children [
+            Html.i [
+                prop.style [ style.marginTop 30 ]
+                prop.classes [ Fa.Fa; faIcon; Fa.Fa2X ] ] ] ]
+
+let card image (heading: string) (body: string) optLink =
   Column.column [ Column.Width (Screen.All, Column.Is4) ]
     [ Card.card [ ]
         [ Card.image
             [ Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
-            [ Icon.icon [ Icon.Size IsMedium
-                          Icon.Props [ Style [ MarginTop "15px" ] ] ]
-                [ Fa.i [icon; Fa.IconOption.Size Fa.Fa2x] [] ] ]
+            [ image ]
           Card.content [ ]
             [ Content.content [ ]
-                [ h4 [ ] [ str heading ]
-                  p [ ] [ str body ]
-                  p [ ]
-                    [ a [ Href ("#" + link) ]
-                        [ str "Play" ] ] ] ] ] ]
+                [ Bulma.title.h4 heading
+                  Html.p body
+                  Html.p
+                    [ match optLink with
+                      | Some link -> Html.a [ prop.href ("#" + link); prop.text "Play" ]
+                      | None -> Html.text "[ work in progress ]" ] ] ] ] ]
 
 let games =
     Bulma.columns [
         prop.className "features"
         prop.children [
-            card Fa.Solid.Dice "Jamb" "Jamb is a dice game like Yahtzee but with somewhat different rules." "jamb"
-            card Fa.Solid.Dice "Tetris" "TODO: Write description" "tetris" ] ]
+            card (icon Fa.FaDice) "Jamb" "Jamb is a dice game like Yahtzee but with somewhat different rules." (Some "jamb")
+            card (icon Fa.FaCubes) "Tetris" "TODO: Write description" None ] ]
 
 let intro =
     Bulma.column [
