@@ -276,11 +276,6 @@ let navbarMenu (state: State) (dispatch: Message -> unit) =
                     prop.children [ icon Fa.FaPlay ]
                     prop.onClick (fun _ -> dispatch NewGame) ] ] ] ]
 
-let renderState state =
-    Html.div [
-        prop.text (sprintf "%A" state.GameState)
-    ]
-
 let view (state: State) (dispatch: Message -> unit) =
     Bulma.columns [
         columns.isVCentered
@@ -296,8 +291,7 @@ let view (state: State) (dispatch: Message -> unit) =
                     [ Bulma.column [
                         columns.isCentered
                         prop.children [ DiceSet.render state.DiceSet (DiceClicked >> dispatch) ] ]
-                      renderRollButton state dispatch
-                      renderState state ]
+                      renderRollButton state dispatch ]
             ]
         ]
     ]
