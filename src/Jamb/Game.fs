@@ -36,7 +36,7 @@ type State = {
 
     static member Test =
         let sixes = List.replicate 6 6
-        { DiceSet = DiceSet.init { NrOfDice = 5; Style = Style.Flat }
+        { DiceSet = DiceSet.init { NrOfDice = 6; Style = Style.Flat }
           Scoreboard =
             [ Up; Down; Free ]
             |> List.collect (fun colId -> rowIds |> List.map (fun rowId -> (colId, rowId), Played sixes))
@@ -46,7 +46,8 @@ type State = {
           GameState = WaitingForRoll None }
 
 let init () =
-    State.Empty DiceSet.defaultConfig, Cmd.none
+    //State.Empty DiceSet.defaultConfig, Cmd.none
+    State.Test, Cmd.none
 
 type Message =
 | StartRolling
@@ -77,13 +78,27 @@ let possibleScores state =
     match state.GameState with
     | WaitingForScore ->
         possible false
-    | Rolling { CalledRow = None; Turn = rollNr; Rolled = true } ->
-        possible (rollNr = 1)
-    | Rolling { CalledRow = Some rowId; Turn = rollNr; Rolled = true } ->
+
+    | Rolling { Rolled = false } ->
+        []
+    | Rolling { Rolled = true; Turn = 1 } | WaitingForCall { Rolled = true; Turn = 1 } ->
+        possible true
+    | Rolling { Rolled = true; CalledRow = None } ->
+        possible false
+    | Rolling { Rolled = true; CalledRow = Some rowId } ->
         [ Call, rowId ]
+
+    | WaitingForCall { Rolled = false } ->
+        []
+    | WaitingForCall { Rolled = true } ->
+        []
     | WaitingForRoll (Some x) ->
         [ x.ScoredCell ]
-    | _ ->
+
+    | WaitingForRoll None ->
+        []
+
+    | GameOver ->
         []
 
 
@@ -139,6 +154,9 @@ let diceStopped state =
         let rolled = { x with Rolled = true }
         let state' = { state with GameState = Rolling rolled }
         let onlyCallCellLeft = possibleScores state' |> List.map fst |> List.forall ((=) Call)
+        printfn "Rolling: %A" x
+        printfn "PossibleScores: %A" (possibleScores state')
+        printfn "OnlyCallCellLeft: %b" onlyCallCellLeft
         match onlyCallCellLeft, x.CalledRow, x.Turn with
         | true, None, _ ->
             { state with GameState = WaitingForCall rolled }, Cmd.none
@@ -165,9 +183,11 @@ let cellClicked state (colId, rowId) =
         { state with Scoreboard = state.Scoreboard.Undo x.ScoredCell; GameState = x.UndoState }, Cmd.none
     | WaitingForRoll _ ->
         ignore
+    | Rolling x when x.Turn = 1 && x.CalledRow = Some rowId && colId = Call ->
+        { state with GameState = Rolling { x with CalledRow = None } }, Cmd.none
     | Rolling x | WaitingForCall x ->
-        match colId, x.CalledRow, x.Turn with
-        | Call, None, 1 ->
+        match colId, x.Turn with
+        | Call, 1 ->
             { state with GameState = Rolling { x with CalledRow = Some rowId } }, Cmd.none
         | _ ->
             tryScore state (colId, rowId)
@@ -205,6 +225,8 @@ let renderScoreboard (state: State) dispatch =
     | WaitingForScore | WaitingForRoll _ ->
         Scoreboard.render state.Scoreboard (possibleScores state) None (CellClicked >> dispatch)
     | Rolling x | WaitingForCall x ->
+        printfn "Render Scoreboard State: %A" state.GameState
+        printfn "Render Scoreboard Possible Scores: %A" (possibleScores state)
         Scoreboard.render state.Scoreboard (possibleScores state) x.CalledRow (CellClicked >> dispatch)
     | GameOver ->
         Scoreboard.render state.Scoreboard [] None (CellClicked >> dispatch)
