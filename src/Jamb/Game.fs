@@ -1,6 +1,5 @@
 module Jamb.Game
 
-open System
 open Elmish
 open Scoreboard
 open DiceSet
@@ -10,12 +9,6 @@ open Feliz.Bulma.Switch
 open Zanaptak.TypedCssClasses
 
 type Fa = CssClasses<"../node_modules/@fortawesome/fontawesome-free/css/fontawesome.min.css", Naming.PascalCase>
-
-type RollingState = {
-    CalledRow: RowId option
-    Turn: int
-    Rolled: bool
-}
 
 type GameState =
 | WaitingForRoll
@@ -299,27 +292,11 @@ let renderScoreboard (state: State) dispatch =
     | RolledOnceCalled calledRow | RolledTwiceCalled calledRow ->
         renderScoreboard [ Call, calledRow ] (Some calledRow)
 
-let renderGameOver score =
-    renderScoreboard
-
 let iconButton faIcon onClick =
     Bulma.button.button
         [ color.isDanger
           prop.children [ icon faIcon ]
           prop.onClick onClick ]
-
-let rollButton rolling canRoll visible faIcon dispatch =
-    Bulma.button.a [
-        prop.children [ icon faIcon ]
-        button.isLarge
-        button.isFullWidth
-        if canRoll then button.isActive
-        prop.disabled (not canRoll)
-        if not visible then prop.className "is-hidden"
-        if rolling then button.isLoading
-        color.isInfo
-        if canRoll then prop.onClick (fun _ -> dispatch StartRolling)
-    ]
 
 let renderRollComponent state dispatch =
     let renderTurn turn =
