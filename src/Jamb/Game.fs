@@ -18,10 +18,15 @@ type RollingState = {
 }
 
 type GameState =
-| WaitingForRoll of {| ScoredCell: CellId; UndoState: GameState |} option
-| Rolling of RollingState
+| WaitingForRoll
+| WaitingForRollWithUndo of {| ScoredCell: CellId; UndoState: GameState |}
+| Rolling of gameState: GameState
+| RolledOnce
+| WaitingForCall
+| RolledOnceCalled of calledRow: RowId
+| RolledTwice
+| RolledTwiceCalled of calledRow: RowId
 | WaitingForScore
-| WaitingForCall of RollingState
 | GameOver
 
 type State = {
@@ -32,7 +37,7 @@ type State = {
     static member Empty config =
         { DiceSet = DiceSet.init config
           Scoreboard = Scoreboard.Init()
-          GameState = WaitingForRoll None }
+          GameState = WaitingForRoll }
 
     static member Test =
         let sixes = List.replicate 6 6
@@ -43,7 +48,7 @@ type State = {
             |> List.append (rowIds |> List.map (fun rowId -> (Call, rowId), NotPlayed))
             |> Map.ofList
             |> Scoreboard
-          GameState = WaitingForRoll None }
+          GameState = WaitingForRollWithUndo {| ScoredCell = Free, FourOfAKind; UndoState = RolledTwice |} }
 
 module Storage =
     open Fable.Import
@@ -65,129 +70,139 @@ module Storage =
         storage.setItem(StorageKey, json)
 
 let init () =
-    let state =
-        Storage.load()
-        |> Option.defaultValue (State.Empty DiceSet.defaultConfig)
-    state, Cmd.none
+    State.Test, Cmd.none
+    // let state =
+    //     Storage.load()
+    //     |> Option.defaultValue (State.Empty DiceSet.defaultConfig)
+    // state, Cmd.none
 
 type Message =
 | StartRolling
-| DiceStopped
+| DiceRolled
 | DiceClicked of DiceId
 | CellClicked of ColumnId*RowId
 | NewGame
+| Undo
 | ToggleDiceStyle
 
 let rollingTimer rollTime =
-    Cmd.OfAsync.perform Async.Sleep rollTime (fun _ -> DiceStopped)
+    Cmd.OfAsync.perform Async.Sleep rollTime (fun _ -> DiceRolled)
 
-module GameState =
-    let firstRoll =
-        Rolling {
-            CalledRow = None
-            Turn = 1
-            Rolled = false
-        }
+let rec turn gameState =
+    match gameState with
+    | WaitingForRoll | WaitingForRollWithUndo _ | GameOver -> 0
+    | Rolling gameState -> turn gameState
+    | RolledOnce | WaitingForCall | RolledOnceCalled _ -> 1
+    | RolledTwice | RolledTwiceCalled _ -> 2
+    | WaitingForScore -> 3
 
-let possibleScores state =
-    let possible includeCall =
-        [ Up; Down; Free; if includeCall then Call]
-        |> List.collect (fun colId ->
-            state.Scoreboard.PossibleScores colId
-            |> List.map (fun rowId -> colId, rowId))
+let possibleScores (scoreboard: Scoreboard) includeCall =
+    [ Up; Down; Free; if includeCall then Call]
+    |> List.collect (fun colId ->
+        scoreboard.PossibleScores colId
+        |> List.map (fun rowId -> colId, rowId))
 
+let highlightedCells state =
     match state.GameState with
-    | WaitingForScore ->
-        possible false
+    | WaitingForRoll
+    | WaitingForRollWithUndo _
+    | GameOver
+    | Rolling _
+    | RolledOnceCalled _ -> List.empty
 
-    | Rolling { Rolled = false } ->
-        []
-    | Rolling { Rolled = true; Turn = 1 } | WaitingForCall { Rolled = true; Turn = 1 } ->
-        possible true
-    | Rolling { Rolled = true; CalledRow = None } ->
-        possible false
-    | Rolling { Rolled = true; CalledRow = Some rowId } ->
-        [ Call, rowId ]
+    | RolledOnce
+    | WaitingForCall -> possibleScores state.Scoreboard true
 
-    | WaitingForCall { Rolled = false } ->
-        []
-    | WaitingForCall { Rolled = true } ->
-        []
-    | WaitingForRoll (Some x) ->
-        [ x.ScoredCell ]
+    | RolledTwice
+    | RolledTwiceCalled _
+    | WaitingForScore -> possibleScores state.Scoreboard false
 
-    | WaitingForRoll None ->
-        []
+let score' state (colId, rowId) nextGameState =
+    let dice = DiceSet.toDots state.DiceSet
+    let scoreboard' = state.Scoreboard.Score (colId, rowId) dice
+    let gameState =
+        if scoreboard'.IsFull
+        then GameOver
+        else nextGameState
+    { state with
+        GameState = gameState
+        Scoreboard = scoreboard'
+        DiceSet = DiceSet.unsaveAll state.DiceSet }, Cmd.none
 
-    | GameOver ->
-        []
-
+let score state (colId, rowId) =
+    let nextGameState = WaitingForRollWithUndo {| ScoredCell = (colId, rowId); UndoState = state.GameState |}
+    score' state (colId, rowId) nextGameState
 
 let tryScore state (colId, rowId) =
     let ignore = state, Cmd.none
 
-    if possibleScores state |> List.contains (colId, rowId) then
-        let dice = DiceSet.toDots state.DiceSet
-        let scoreboard' = state.Scoreboard.Score (colId, rowId) dice
-        let gameState =
-            if scoreboard'.IsFull
-            then GameOver
-            else WaitingForRoll (Some {| ScoredCell = (colId, rowId); UndoState = state.GameState |})
-        { state with
-            GameState = gameState
-            Scoreboard = scoreboard'
-            DiceSet = DiceSet.unsaveAll state.DiceSet }, Cmd.none
-    else
+    match state.GameState with
+    | WaitingForRoll
+    | WaitingForRollWithUndo _
+    | GameOver
+    | Rolling _ -> ignore
+    | (RolledOnceCalled calledRow | RolledTwiceCalled calledRow)
+        when (Call, calledRow) = (colId, rowId) ->
+            score state (colId, rowId)
+    | (RolledOnceCalled _ | RolledTwiceCalled _)->
         ignore
-
+    | (RolledOnce | RolledTwice | WaitingForScore)
+        when possibleScores state.Scoreboard false |> List.contains (colId, rowId) ->
+            score state (colId, rowId)
+    | (RolledOnce | RolledTwice | WaitingForScore ) ->
+        ignore
+    | WaitingForCall ->
+        failwithf "State is in WaitingForCall but tried to score: %A" (colId, rowId)
 
 let rec startRolling state =
     let ignore = state, Cmd.none
 
     match state.GameState with
-    | WaitingForRoll _ ->
-        let firstRoll = Rolling { Turn = 1; Rolled = false; CalledRow = None }
-        let diceSet, rollTime = DiceSet.rollAll state.DiceSet
+    | WaitingForCall
+    | WaitingForScore
+    | Rolling _ ->
+        ignore
+
+    | WaitingForRoll
+    | GameOver
+    | WaitingForRollWithUndo _
+    | RolledOnce
+    | RolledOnceCalled _
+    | RolledTwice
+    | RolledTwiceCalled _ ->
+        let diceSet, rollTime = DiceSet.rollNotSaved state.DiceSet
         { state with
             DiceSet = diceSet
-            GameState = firstRoll }, rollingTimer rollTime
-    | Rolling x ->
-        if not x.Rolled then
-            ignore
-        else
-            let gameState = Rolling { x with Turn = x.Turn + 1; Rolled = false }
-            let diceSet, rollTime = DiceSet.rollNotSaved state.DiceSet
-            { state with
-                DiceSet = diceSet
-                GameState = gameState }, rollingTimer rollTime
-    | WaitingForScore | WaitingForCall _ ->
-        ignore
-    | GameOver ->
-        startRolling (State.Empty (DiceSet.config state.DiceSet))
+            GameState = Rolling state.GameState }, rollingTimer rollTime
 
-let diceStopped state =
+
+let diceRolled (state: State) =
     let ignore = state, Cmd.none
 
-    match state.GameState with
-    | WaitingForRoll _ | WaitingForScore | GameOver | WaitingForCall _ ->
-        ignore
-    | Rolling x ->
-        let rolled = { x with Rolled = true }
-        let state' = { state with GameState = Rolling rolled }
-        let onlyCallCellLeft = possibleScores state' |> List.map fst |> List.forall ((=) Call)
-        printfn "Rolling: %A" x
-        printfn "PossibleScores: %A" (possibleScores state')
-        printfn "OnlyCallCellLeft: %b" onlyCallCellLeft
-        match onlyCallCellLeft, x.CalledRow, x.Turn with
-        | true, None, _ ->
-            { state with GameState = WaitingForCall rolled }, Cmd.none
-        | _, Some rowId, turn when turn >= 3 ->
-            tryScore { state with GameState = Rolling rolled } (Call, rowId)
-        | _, None, turn when turn >= 3 ->
-            { state with GameState = WaitingForScore }, Cmd.none
-        | _ ->
-            { state with GameState = Rolling rolled }, Cmd.none
+    let withNextGameState gs = { state with GameState = gs }, Cmd.none
 
+    let nextState gs =
+        match gs with
+        | WaitingForRoll
+        | WaitingForRollWithUndo _ ->
+            let mustCall = possibleScores state.Scoreboard false |> List.isEmpty
+            if mustCall
+            then withNextGameState WaitingForCall
+            else withNextGameState RolledOnce
+        | GameOver ->
+            withNextGameState RolledOnce
+        | RolledOnce -> withNextGameState RolledTwice
+        | RolledOnceCalled calledRow -> withNextGameState (RolledTwiceCalled calledRow)
+        | RolledTwice -> withNextGameState WaitingForScore
+        | RolledTwiceCalled calledRow -> score' state (Call, calledRow) WaitingForRoll
+
+        | Rolling _ -> failwith "Rolling in Rolling GameState should not be possible"
+        | WaitingForCall -> failwith "Rolling when WaitingForCall should not be possible."
+        | WaitingForScore -> failwith "Rolling when WaitingForScore should not be possible."
+
+    match state.GameState with
+    | Rolling gs -> nextState gs
+    | _ -> ignore
 
 let toggleSave state diceId =
     { state with DiceSet = DiceSet.toggleSave diceId state.DiceSet }, Cmd.none
@@ -195,30 +210,55 @@ let toggleSave state diceId =
 let cellClicked state (colId, rowId) =
     let ignore = state, Cmd.none
 
+    let tryCall () =
+        if state.Scoreboard.PossibleScores Call |> List.contains rowId
+        then { state with GameState = RolledOnceCalled rowId }, Cmd.none
+        else ignore
+
+    let tryScore () = tryScore state (colId, rowId)
+
+    match state.GameState, colId with
+    | (WaitingForRoll | WaitingForRollWithUndo _ | Rolling _ | GameOver), _ -> ignore
+
+    | WaitingForCall, Call -> tryCall ()
+    | WaitingForCall, _ -> ignore
+
+    | RolledOnce, Call -> tryCall ()
+    | RolledOnce, _ -> tryScore ()
+
+    | RolledOnceCalled calledRow, Call when calledRow = rowId -> tryScore ()
+    | RolledOnceCalled _, Call -> tryCall ()
+    | RolledOnceCalled _, _ -> ignore
+
+    | RolledTwiceCalled calledRow, Call when calledRow = rowId -> tryScore ()
+    | RolledTwiceCalled calledRow, _ -> ignore
+
+    | (RolledTwice | WaitingForScore), Call -> ignore
+    | (RolledTwice | WaitingForScore), _ -> tryScore ()
+
+let undo state =
+    let ignore = state, Cmd.none
+
     match state.GameState with
-    | GameOver ->
-        ignore
-    | WaitingForScore ->
-        tryScore state (colId, rowId)
-    | WaitingForRoll (Some x) when x.ScoredCell = (colId, rowId) ->
-        { state with Scoreboard = state.Scoreboard.Undo x.ScoredCell; GameState = x.UndoState }, Cmd.none
-    | WaitingForRoll _ ->
-        ignore
-    | Rolling x when x.Turn = 1 && x.CalledRow = Some rowId && colId = Call ->
-        { state with GameState = Rolling { x with CalledRow = None } }, Cmd.none
-    | Rolling x | WaitingForCall x ->
-        match colId, x.Turn with
-        | Call, 1 ->
-            { state with GameState = Rolling { x with CalledRow = Some rowId } }, Cmd.none
-        | _ ->
-            tryScore state (colId, rowId)
+    | RolledOnceCalled _ ->
+        let mustCall = possibleScores state.Scoreboard false |> List.isEmpty
+        if mustCall
+        then { state with GameState = WaitingForCall }, Cmd.none
+        else { state with GameState = RolledOnce }, Cmd.none
+    | WaitingForRollWithUndo x ->
+        { state with
+            Scoreboard = state.Scoreboard.Undo x.ScoredCell
+            GameState = x.UndoState }, Cmd.none
+    | _ -> ignore
 
 let diceClicked state diceId =
     let ignore = state, Cmd.none
 
     match state.GameState with
-    | WaitingForRoll _
-    | Rolling { Rolled = false } ->
+    | Rolling _
+    | WaitingForRollWithUndo _
+    | WaitingForRoll
+    | WaitingForRollWithUndo _ ->
         ignore
     | _ ->
         toggleSave state diceId
@@ -236,9 +276,10 @@ let update message state =
     match message with
     | NewGame -> (State.Empty (DiceSet.config state.DiceSet)), Cmd.none
     | StartRolling -> startRolling state
-    | DiceStopped -> diceStopped state
+    | DiceRolled -> diceRolled state
     | DiceClicked diceId -> diceClicked state diceId
     | CellClicked (colId, rowId) -> cellClicked state (colId, rowId)
+    | Undo -> undo state
     | ToggleDiceStyle -> toggleDiceStyle state
     |> saveStateToLocalStorage
 
@@ -247,18 +288,25 @@ let icon (faIcon: string) =
         Html.i [ prop.classes [ Fa.Fa; faIcon ] ] ]
 
 let renderScoreboard (state: State) dispatch =
+    let renderScoreboard highlight called =
+        Scoreboard.render state.Scoreboard highlight called (CellClicked >> dispatch)
+
     match state.GameState with
-    | WaitingForScore | WaitingForRoll _ ->
-        Scoreboard.render state.Scoreboard (possibleScores state) None (CellClicked >> dispatch)
-    | Rolling x | WaitingForCall x ->
-        printfn "Render Scoreboard State: %A" state.GameState
-        printfn "Render Scoreboard Possible Scores: %A" (possibleScores state)
-        Scoreboard.render state.Scoreboard (possibleScores state) x.CalledRow (CellClicked >> dispatch)
-    | GameOver ->
-        Scoreboard.render state.Scoreboard [] None (CellClicked >> dispatch)
+    | WaitingForRoll | WaitingForRollWithUndo _ | Rolling _ | GameOver ->
+        renderScoreboard [] None
+    | RolledOnce | RolledTwice | WaitingForScore | WaitingForCall ->
+        renderScoreboard (highlightedCells state) None
+    | RolledOnceCalled calledRow | RolledTwiceCalled calledRow ->
+        renderScoreboard [ Call, calledRow ] (Some calledRow)
 
 let renderGameOver score =
     renderScoreboard
+
+let iconButton faIcon onClick =
+    Bulma.button.button
+        [ color.isDanger
+          prop.children [ icon faIcon ]
+          prop.onClick onClick ]
 
 let rollButton rolling canRoll visible faIcon dispatch =
     Bulma.button.a [
@@ -273,28 +321,90 @@ let rollButton rolling canRoll visible faIcon dispatch =
         if canRoll then prop.onClick (fun _ -> dispatch StartRolling)
     ]
 
-let renderRollButton state dispatch =
-    let rollingButton rolled visible = rollButton (not rolled) rolled visible "fa-dice" dispatch
-    let waitingForScoreButton visible = rollButton false false visible "fa-pen" dispatch
-    let waitingForRollButton visible = rollButton false true visible "fa-dice" dispatch
-    let waitingForCallButton visible = rollButton false false visible "fa-check" dispatch
-    let gameOverButton visible = rollButton false true visible "fa-trophy" dispatch
+let renderRollComponent state dispatch =
+    let renderTurn turn =
+        let rollsLeft = 3 - turn
+        if rollsLeft = 0
+        then
+            Html.div [ icon Fa.FaHourglass ]
+        else
+            [ Fa.FaDiceOne; Fa.FaDiceTwo; Fa.FaDiceThree ]
+            |> List.map icon
+            |> List.take rollsLeft
+            |> Html.div
 
-    let buttons rolled r wfs wfr wfc go =
-        Html.div [
-            rollingButton rolled r
-            waitingForScoreButton wfs
-            waitingForRollButton wfr
-            waitingForCallButton wfc
-            gameOverButton go
+    let canUndo =
+        match state.GameState with
+        | WaitingForRollWithUndo _ | RolledOnceCalled _ -> true
+        | _ -> false
+
+    let undoButton =
+        Bulma.column [
+            column.is2
+            prop.children [
+                Bulma.button.button [
+                    button.isFullWidth
+                    button.isLarge
+                    color.isWarning
+                    prop.onClick (fun _ -> dispatch Undo)
+                    prop.children [
+                        Bulma.icon [ Html.i [ prop.classes [ Fa.Fa; Fa.FaUndo ] ] ] ] ] ] ]
+
+    let isRolling =
+        match state.GameState with
+        | Rolling _ -> true
+        | _ -> false
+
+    let canRoll =
+        match state.GameState with
+        | WaitingForRoll
+        | WaitingForRollWithUndo _
+        | RolledOnce
+        | RolledOnceCalled _
+        | RolledTwice
+        | RolledTwiceCalled _
+        | GameOver -> true
+
+        | WaitingForScore
+        | WaitingForCall
+        | Rolling _ -> false
+
+    let renderRollButton faIcon =
+        Bulma.button.a [
+            prop.children [ icon faIcon ]
+            color.isInfo
+            button.isLarge
+            button.isFullWidth
+            prop.disabled (not canRoll)
+            prop.onClick (fun _ -> dispatch StartRolling)
+            if isRolling then button.isLoading
         ]
 
-    match state.GameState with
-    | Rolling x -> buttons x.Rolled true false false false false
-    | WaitingForScore -> buttons false false true false false false
-    | WaitingForRoll _ -> buttons false false false true false false
-    | WaitingForCall x -> buttons x.Rolled false false true false false
-    | GameOver -> buttons false false false false false true
+    let rollButton =
+        match state.GameState with
+        | WaitingForRoll -> renderRollButton Fa.FaDice
+        | WaitingForRollWithUndo _ -> renderRollButton Fa.FaDice
+        | Rolling _ -> renderRollButton Fa.FaDice
+        | RolledOnce -> renderRollButton Fa.FaDice
+        | WaitingForCall -> renderRollButton Fa.FaCheckCircle
+        | RolledOnceCalled _ -> renderRollButton Fa.FaDice
+        | RolledTwice -> renderRollButton Fa.FaDice
+        | RolledTwiceCalled _ -> renderRollButton Fa.FaDice
+        | WaitingForScore -> renderRollButton Fa.FaPencilAlt
+        | GameOver -> renderRollButton Fa.FaTrophy
+
+    let renderState =
+        Html.div [
+            color.isLight
+            prop.text (sprintf "%A" state.GameState)
+        ]
+
+    Html.div
+        [ Bulma.columns
+            [ if canUndo then undoButton
+              Bulma.column [ rollButton ] ]
+          renderTurn (turn state.GameState)
+          renderState ]
 
 let diceStyleSwitch style dispatch =
     Bulma.navbarItem.div [
@@ -319,10 +429,7 @@ let navbarMenu (state: State) (dispatch: Message -> unit) =
         Bulma.navbarEnd.div [
             Bulma.navbarItem.div [
                 diceStyleSwitch state.DiceSet.Style dispatch
-                Bulma.button.button [
-                    color.isDanger
-                    prop.children [ icon Fa.FaFastBackward ]
-                    prop.onClick (fun _ -> dispatch NewGame) ] ] ] ]
+                iconButton Fa.FaFastBackward (fun _ -> dispatch NewGame) ] ] ]
 
 let view (state: State) (dispatch: Message -> unit) =
     Bulma.columns [
@@ -339,7 +446,7 @@ let view (state: State) (dispatch: Message -> unit) =
                     [ Bulma.column [
                         columns.isCentered
                         prop.children [ DiceSet.render state.DiceSet (DiceClicked >> dispatch) ] ]
-                      renderRollButton state dispatch ]
+                      renderRollComponent state dispatch ]
             ]
         ]
     ]
