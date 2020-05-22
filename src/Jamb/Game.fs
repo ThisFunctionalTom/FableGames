@@ -10,6 +10,13 @@ open Zanaptak.TypedCssClasses
 
 type Fa = CssClasses<"../node_modules/@fortawesome/fontawesome-free/css/fontawesome.min.css", Naming.PascalCase>
 
+[<RequireQualifiedAccess>]
+module List =
+    let safeTake count list =
+        if List.length list < count
+        then list
+        else List.take count list
+
 type GameState =
 | WaitingForRoll
 | WaitingForRollWithUndo of {| ScoredCell: CellId; UndoState: GameState |}
@@ -22,51 +29,118 @@ type GameState =
 | WaitingForScore
 | GameOver
 
+type HallOfFameEntry =
+    { Name: string
+      Scoreboard: Scoreboard }
+
+type HallOfFame = HallOfFameEntry list
+
+let [<Literal>] HallOfFameEntries = 10
+
 type State = {
     DiceSet: DiceSet
     Scoreboard: Scoreboard
     GameState: GameState
+    Player: string
+    HallOfFame: HallOfFame
 } with
-    static member Empty config =
+    static member Empty config hallOfFame =
         { DiceSet = DiceSet.init config
           Scoreboard = Scoreboard.Init()
-          GameState = WaitingForRoll }
+          GameState = WaitingForRoll
+          Player = "Kumerle"
+          HallOfFame = hallOfFame }
 
-    static member Test =
-        let sixes = List.replicate 6 6
-        { DiceSet = DiceSet.init { NrOfDice = 6; Style = Style.Flat }
-          Scoreboard =
-            [ Up; Down; Free ]
-            |> List.collect (fun colId -> rowIds |> List.map (fun rowId -> (colId, rowId), Played sixes))
+module Test =
+    open System
+    let rnd = Random()
+
+    module Player =
+        let players =
+            [ "Andreja"; "Megie"; "Domi"; "Luka"; "Anastasija"; "Tom";
+              "Irena"; "Kumerle"; "Kazo"; "Gazda"; "Teo"; "Lucija"; "Krolo" ]
+
+        let random() =
+            List.item (rnd.Next(0, players.Length)) players
+
+    module DiceDots =
+        let random() = List.init 6 (fun _ -> rnd.Next(1, 7))
+
+    module Scoreboard =
+        let random columns =
+            columns
+            |> List.collect (fun colId -> rowIds |> List.map (fun rowId -> (colId, rowId), Played (DiceDots.random())))
             |> List.append (rowIds |> List.map (fun rowId -> (Call, rowId), NotPlayed))
             |> Map.ofList
             |> Scoreboard
-          GameState = WaitingForRollWithUndo {| ScoredCell = Free, FourOfAKind; UndoState = RolledTwice |} }
+
+        let filled() =
+            random [ Down; Up; Free; Call ]
+
+    module HallOfFame =
+        let filled () =
+            List.init HallOfFameEntries (fun _ -> Player.random())
+            |> List.map (fun name -> { Name = name; Scoreboard = Scoreboard.filled() })
+            |> List.sortByDescending (fun x -> x.Scoreboard.GetTotal())
+
+    module DiceSet =
+        let flat = DiceSet.init { NrOfDice = 6; Style = Style.Flat }
+        let cube = DiceSet.init { NrOfDice = 6; Style = Style.Cube Even }
+
+    let init scoreboard gameState hallOfFame =
+        { DiceSet = DiceSet.flat
+          Player = Player.random()
+          Scoreboard = scoreboard
+          GameState = gameState
+          HallOfFame = hallOfFame }
 
 module Storage =
     open Fable.Import
     open Thoth.Json
 
     let storage = Browser.WebStorage.localStorage
-    let [<Literal>] StorageKey = "jamb"
+    let [<Literal>] GameStateKey = "jamb-gameState"
+    let [<Literal>] HallOfFameKey = "jamb-hallOfFame"
 
-    let (encoder: Encoder<State>) = Encode.Auto.generateEncoder()
-    let (decoder: Decoder<State>) = Decode.Auto.generateDecoder()
+    module GameState =
+        let (encoder: Encoder<State>) = Encode.Auto.generateEncoder()
+        let (decoder: Decoder<State>) = Decode.Auto.generateDecoder()
 
-    let load () =
-        storage.getItem StorageKey
-        |> Decode.fromString decoder
+    module HallOfFame =
+        let (encoder: Encoder<HallOfFameEntry list>) = Encode.Auto.generateEncoder()
+        let (decoder: Decoder<HallOfFameEntry list>) = Decode.Auto.generateDecoder()
+
+    let loadGameState () =
+        storage.getItem GameStateKey
+        |> Decode.fromString GameState.decoder
         |> function | Ok value -> Some value | _ -> None
 
-    let save state =
-        let json = encoder state |> Encode.toString 2
-        storage.setItem(StorageKey, json)
+    let saveGameState state =
+        let json = GameState.encoder state |> Encode.toString 2
+        storage.setItem(GameStateKey, json)
+
+    let loadHallOfFame () =
+        storage.getItem HallOfFameKey
+        |> Decode.fromString HallOfFame.decoder
+        |> function | Ok value -> Some value | _ -> None
+
+    let saveHallOfFame state =
+        let json = HallOfFame.encoder state |> Encode.toString 2
+        storage.setItem(GameStateKey, json)
+
+let initTest() =
+    { DiceSet = Test.DiceSet.flat
+      Player = Test.Player.random()
+      Scoreboard = Test.Scoreboard.filled()
+      GameState = GameOver
+      HallOfFame = Test.HallOfFame.filled() }
 
 let init () =
-    //State.Test, Cmd.none
+    //initTest(), Cmd.none
+    let hallOfFame = Storage.loadHallOfFame() |> Option.defaultValue []
     let state =
-        Storage.load()
-        |> Option.defaultValue (State.Empty DiceSet.defaultConfig)
+        Storage.loadGameState()
+        |> Option.defaultValue (State.Empty DiceSet.defaultConfig hallOfFame)
     state, Cmd.none
 
 type Message =
@@ -110,17 +184,33 @@ let highlightedCells state =
     | RolledTwiceCalled _
     | WaitingForScore -> possibleScores state.Scoreboard false
 
+let saveToHallOfFame state =
+    let newHallOfFame =
+        [ yield! state.HallOfFame
+          { Name = state.Player; Scoreboard = state.Scoreboard } ]
+        |> List.sortByDescending (fun x -> x.Scoreboard.GetTotal())
+        |> List.safeTake HallOfFameEntries
+
+    Storage.saveHallOfFame newHallOfFame
+    { state with HallOfFame = newHallOfFame }, Cmd.none
+
+let newGame state =
+    (State.Empty (DiceSet.config state.DiceSet) state.HallOfFame)
+
 let score' state (colId, rowId) nextGameState =
     let dice = DiceSet.toDots state.DiceSet
     let scoreboard' = state.Scoreboard.Score (colId, rowId) dice
-    let gameState =
-        if scoreboard'.IsFull
-        then GameOver
-        else nextGameState
-    { state with
-        GameState = gameState
-        Scoreboard = scoreboard'
-        DiceSet = DiceSet.unsaveAll state.DiceSet }, Cmd.none
+    let state' =
+        { state with
+            Scoreboard = scoreboard'
+            DiceSet = DiceSet.unsaveAll state.DiceSet }
+
+    let isGameOver = scoreboard'.IsFull
+
+    if isGameOver then
+        saveToHallOfFame { state' with GameState = GameOver }
+    else
+        { state' with GameState = nextGameState }, Cmd.none
 
 let score state (colId, rowId) =
     let nextGameState = WaitingForRollWithUndo {| ScoredCell = (colId, rowId); UndoState = state.GameState |}
@@ -150,23 +240,28 @@ let tryScore state (colId, rowId) =
 let rec startRolling state =
     let ignore = state, Cmd.none
 
+    let roll state =
+        let diceSet, rollTime = DiceSet.rollNotSaved state.DiceSet
+        { state with
+            DiceSet = diceSet
+            GameState = Rolling state.GameState }, rollingTimer rollTime
+
     match state.GameState with
     | WaitingForCall
     | WaitingForScore
     | Rolling _ ->
         ignore
 
+    | GameOver ->
+        roll (newGame state)
+
     | WaitingForRoll
-    | GameOver
     | WaitingForRollWithUndo _
     | RolledOnce
     | RolledOnceCalled _
     | RolledTwice
     | RolledTwiceCalled _ ->
-        let diceSet, rollTime = DiceSet.rollNotSaved state.DiceSet
-        { state with
-            DiceSet = diceSet
-            GameState = Rolling state.GameState }, rollingTimer rollTime
+        roll state
 
 
 let diceRolled (state: State) =
@@ -259,22 +354,22 @@ let diceClicked state diceId =
 let toggleDiceStyle state =
     { state with DiceSet = DiceSet.toggleStyle state.DiceSet }, Cmd.none
 
-let saveStateToLocalStorage (state, cmd) =
-    Storage.save state
+let saveGameStateToLocalStorage (state, cmd) =
+    Storage.saveGameState state
     state, cmd
 
 let update message state =
     let ignore = state, Cmd.none
 
     match message with
-    | NewGame -> (State.Empty (DiceSet.config state.DiceSet)), Cmd.none
+    | NewGame -> newGame state, Cmd.none
     | StartRolling -> startRolling state
     | DiceRolled -> diceRolled state
     | DiceClicked diceId -> diceClicked state diceId
     | CellClicked (colId, rowId) -> cellClicked state (colId, rowId)
     | Undo -> undo state
     | ToggleDiceStyle -> toggleDiceStyle state
-    |> saveStateToLocalStorage
+    |> saveGameStateToLocalStorage
 
 let icon (faIcon: string) =
     Bulma.icon [
@@ -408,9 +503,51 @@ let navbarMenu (state: State) (dispatch: Message -> unit) =
                 diceStyleSwitch state.DiceSet.Style dispatch
                 iconButton Fa.FaFastBackward (fun _ -> dispatch NewGame) ] ] ]
 
+let renderDiceSet diceSet dispatch =
+    Bulma.column [
+        columns.isCentered
+        prop.children [ DiceSet.render diceSet (DiceClicked >> dispatch) ] ]
+
+let renderHallOfFame (hallOfFame: HallOfFame) dispatch =
+    let head =
+        Html.thead
+            [ Html.tr
+                [ Html.th "Place"
+                  Html.th "Name"
+                  Html.th "Score" ] ]
+
+    let body =
+        let rows =
+            let emptyRow (place: int) =
+                Html.tr
+                    [ Html.th place
+                      Html.th "-"
+                      Html.td "-" ]
+            let toRow (place: int) entry =
+                Html.tr
+                    [ Html.th place
+                      Html.th entry.Name
+                      Html.td (entry.Scoreboard.GetTotal()) ]
+
+            [1..HallOfFameEntries]
+            |> List.map (fun place ->
+                List.tryItem (place-1) hallOfFame
+                |> Option.map (toRow place)
+                |> Option.defaultValue (emptyRow place))
+
+        Html.tbody rows
+
+    Bulma.table [
+        table.isBordered
+        table.isNarrow
+        table.isFullWidth
+        prop.children
+            [ head
+              body ]
+    ]
+
 let view (state: State) (dispatch: Message -> unit) =
     Bulma.columns [
-        columns.isVCentered
         columns.isCentered
         prop.children [
             Bulma.column [
@@ -420,9 +557,8 @@ let view (state: State) (dispatch: Message -> unit) =
             Bulma.column [
                 column.is4
                 prop.children
-                    [ Bulma.column [
-                        columns.isCentered
-                        prop.children [ DiceSet.render state.DiceSet (DiceClicked >> dispatch) ] ]
+                    [ renderHallOfFame state.HallOfFame dispatch
+                      renderDiceSet state.DiceSet dispatch
                       renderRollComponent state dispatch ]
             ]
         ]
