@@ -70,11 +70,11 @@ module Storage =
         storage.setItem(StorageKey, json)
 
 let init () =
-    State.Test, Cmd.none
-    // let state =
-    //     Storage.load()
-    //     |> Option.defaultValue (State.Empty DiceSet.defaultConfig)
-    // state, Cmd.none
+    //State.Test, Cmd.none
+    let state =
+        Storage.load()
+        |> Option.defaultValue (State.Empty DiceSet.defaultConfig)
+    state, Cmd.none
 
 type Message =
 | StartRolling
