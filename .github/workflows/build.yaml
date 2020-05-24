@@ -2,7 +2,8 @@ name: Build
 on:
     push:
         branches:
-          - !master
+          - '*'
+          - '!master'
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
