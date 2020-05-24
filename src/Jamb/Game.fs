@@ -17,6 +17,14 @@ module List =
         then list
         else List.take count list
 
+[<RequireQualifiedAccess>]
+module Key =
+    [<Literal>]
+    let Esc = 27.
+
+    [<Literal>]
+    let Enter = 13.
+
 type GameState =
 | WaitingForRoll
 | WaitingForRollWithUndo of {| ScoredCell: CellId; UndoState: GameState |}
@@ -37,19 +45,60 @@ type HallOfFame = HallOfFameEntry list
 
 let [<Literal>] HallOfFameEntries = 10
 
+module HallOfFame =
+    let canEnterHallOfFame (scoreboard: Scoreboard) hallOfFame =
+        if List.length hallOfFame < HallOfFameEntries then
+            true
+        else
+            let score = scoreboard.GetTotal()
+            hallOfFame
+            |> List.exists (fun e -> e.Scoreboard.GetTotal() < score)
+
+    let enterHallOfFame name scoreboard hallOfFame =
+        [ yield! hallOfFame
+          { Name = name; Scoreboard = scoreboard } ]
+        |> List.sortByDescending (fun x -> x.Scoreboard.GetTotal())
+        |> List.safeTake HallOfFameEntries
+
+let [<Literal>] DefaultHappyGif = "img/happy.gif"
+let [<Literal>] DefaultSadGif = "img/sad.gif"
+
 type State = {
     DiceSet: DiceSet
     Scoreboard: Scoreboard
     GameState: GameState
     Player: string
     HallOfFame: HallOfFame
-} with
-    static member Empty config hallOfFame =
+    HappyGif: string
+    SadGif: string } with
+    static member Empty config player hallOfFame =
         { DiceSet = DiceSet.init config
           Scoreboard = Scoreboard.Init()
           GameState = WaitingForRoll
-          Player = "Kumerle"
-          HallOfFame = hallOfFame }
+          Player = player
+          HallOfFame = hallOfFame
+          HappyGif = DefaultHappyGif
+          SadGif = DefaultSadGif }
+
+let (|Winner|Loser|Playing|) state =
+    match state.GameState with
+    | GameOver ->
+        if HallOfFame.canEnterHallOfFame state.Scoreboard state.HallOfFame
+        then Winner
+        else Loser
+    | _ -> Playing
+
+type Message =
+| StartRolling
+| DiceRolled
+| DiceClicked of DiceId
+| CellClicked of ColumnId*RowId
+| NewGame
+| Undo
+| ToggleDiceStyle
+| ChangePlayerName of string
+| ConfirmGameOver
+| SetGameOverGifs of Result<string, string>*Result<string, string>
 
 module Test =
     open System
@@ -92,7 +141,40 @@ module Test =
           Player = Player.random()
           Scoreboard = scoreboard
           GameState = gameState
-          HallOfFame = hallOfFame }
+          HallOfFame = hallOfFame
+          HappyGif = DefaultHappyGif
+          SadGif = DefaultSadGif }
+
+module Giphy =
+    open Fable.SimpleHttp
+    open Thoth.Json
+
+    let randomGifApi tag =
+        sprintf "https://api.giphy.com/v1/gifs/random?api_key=17ZIBV8VyY204dyItEglTg1A96XkmBZe&tag=%s&rating=G" tag
+
+    let getMediumUrl jsonString =
+        let mediumUrl =
+            Decode.at ["data"; "images"; "downsized"; "url" ] Decode.string
+        Decode.fromString mediumUrl jsonString
+
+    let getRandomGifUrl tag =
+        async {
+            let! (statusCode, responseText) = Http.get (randomGifApi tag)
+            return
+                if statusCode = 200
+                then getMediumUrl responseText
+                else Error (sprintf "Received status code: %d" statusCode)
+        }
+
+let getGifsCmd =
+    let task () =
+        async {
+            let! happyR = Giphy.getRandomGifUrl "happy"
+            let! sadR = Giphy.getRandomGifUrl "sad"
+            return happyR, sadR
+        }
+
+    Cmd.OfAsync.perform task () SetGameOverGifs
 
 module Storage =
     open Fable.Import
@@ -133,24 +215,17 @@ let initTest() =
       Player = Test.Player.random()
       Scoreboard = Test.Scoreboard.filled()
       GameState = GameOver
-      HallOfFame = Test.HallOfFame.filled() }
+      HallOfFame = Test.HallOfFame.filled()
+      HappyGif = DefaultHappyGif
+      SadGif = DefaultSadGif }, getGifsCmd
 
 let init () =
-    //initTest(), Cmd.none
+    //initTest()
     let hallOfFame = Storage.loadHallOfFame() |> Option.defaultValue []
     let state =
         Storage.loadGameState()
-        |> Option.defaultValue (State.Empty DiceSet.defaultConfig hallOfFame)
+        |> Option.defaultValue (State.Empty DiceSet.defaultConfig "Player" hallOfFame)
     state, Cmd.none
-
-type Message =
-| StartRolling
-| DiceRolled
-| DiceClicked of DiceId
-| CellClicked of ColumnId*RowId
-| NewGame
-| Undo
-| ToggleDiceStyle
 
 let rollingTimer rollTime =
     Cmd.OfAsync.perform Async.Sleep rollTime (fun _ -> DiceRolled)
@@ -185,17 +260,12 @@ let highlightedCells state =
     | WaitingForScore -> possibleScores state.Scoreboard false
 
 let saveToHallOfFame state =
-    let newHallOfFame =
-        [ yield! state.HallOfFame
-          { Name = state.Player; Scoreboard = state.Scoreboard } ]
-        |> List.sortByDescending (fun x -> x.Scoreboard.GetTotal())
-        |> List.safeTake HallOfFameEntries
-
+    let newHallOfFame = HallOfFame.enterHallOfFame state.Player state.Scoreboard state.HallOfFame
     Storage.saveHallOfFame newHallOfFame
-    { state with HallOfFame = newHallOfFame }, Cmd.none
+    { state with HallOfFame = newHallOfFame }
 
 let newGame state =
-    (State.Empty (DiceSet.config state.DiceSet) state.HallOfFame)
+    (State.Empty (DiceSet.config state.DiceSet) state.Player state.HallOfFame)
 
 let score' state (colId, rowId) nextGameState =
     let dice = DiceSet.toDots state.DiceSet
@@ -208,7 +278,7 @@ let score' state (colId, rowId) nextGameState =
     let isGameOver = scoreboard'.IsFull
 
     if isGameOver then
-        saveToHallOfFame { state' with GameState = GameOver }
+        { state' with GameState = GameOver }, Cmd.none
     else
         { state' with GameState = nextGameState }, Cmd.none
 
@@ -358,17 +428,36 @@ let saveGameStateToLocalStorage (state, cmd) =
     Storage.saveGameState state
     state, cmd
 
+let mapOk result f state =
+    match result with
+    | Ok value -> f state value
+    | _ -> state
+
 let update message state =
     let ignore = state, Cmd.none
 
+    printfn "Player: %s" state.Player
+    printfn "GameState: %A" state.GameState
+
     match message with
-    | NewGame -> newGame state, Cmd.none
+    | NewGame -> newGame state, getGifsCmd
     | StartRolling -> startRolling state
     | DiceRolled -> diceRolled state
     | DiceClicked diceId -> diceClicked state diceId
     | CellClicked (colId, rowId) -> cellClicked state (colId, rowId)
     | Undo -> undo state
     | ToggleDiceStyle -> toggleDiceStyle state
+    | ChangePlayerName newName ->
+        { state with Player = newName }, Cmd.none
+    | ConfirmGameOver ->
+        saveToHallOfFame state |> newGame, getGifsCmd
+    | SetGameOverGifs (happyR, sadR) ->
+        printfn "Setting game over gifs to: %A %A" happyR sadR
+        let nextState =
+            state
+            |> mapOk happyR (fun s x -> { s with HappyGif = x })
+            |> mapOk sadR (fun s x -> { s with SadGif = x })
+        nextState, Cmd.none
     |> saveGameStateToLocalStorage
 
 let icon (faIcon: string) =
@@ -499,6 +588,12 @@ let diceStyleSwitch style dispatch =
 let navbarMenu (state: State) (dispatch: Message -> unit) =
     Bulma.navbarMenu [
         Bulma.navbarEnd.div [
+            // Bulma.navbarItem.div [
+            //     Bulma.button.button [
+            //         prop.text "Finish Game"
+            //         prop.onClick (fun _ -> dispatch FinishGame)
+            //     ]
+            // ]
             Bulma.navbarItem.div [
                 diceStyleSwitch state.DiceSet.Style dispatch
                 iconButton Fa.FaFastBackward (fun _ -> dispatch NewGame) ] ] ]
@@ -546,10 +641,75 @@ let renderHallOfFame (hallOfFame: HallOfFame) dispatch =
               body ]
     ]
 
-let view (state: State) (dispatch: Message -> unit) =
+let centered (elements: ReactElement) =
     Bulma.columns [
         columns.isCentered
+        prop.children elements
+    ]
+
+let gameOverGif url =
+    Bulma.image [ Html.img [ prop.src url ] ]
+
+let enterHallOfFame (state: State) (dispatch: Message -> unit) =
+    let nameInput =
+        Bulma.field.div
+            [ Bulma.label "Please tell me your name:"
+              Bulma.control.div
+                [ control.hasIconsLeft
+                  prop.children
+                    [ icon Fa.FaUser
+                      Bulma.input.text
+                        [ prop.value state.Player
+                          prop.onKeyDown (fun kev -> if kev.keyCode = Key.Enter then dispatch ConfirmGameOver )
+                          prop.onTextChange (ChangePlayerName >> dispatch) ] ] ] ]
+
+    let saveButton =
+        Bulma.button.a
+            [ prop.text "Save"
+              prop.onClick (fun _ -> dispatch ConfirmGameOver)
+              button.isActive
+              color.isPrimary ]
+
+    Bulma.modal
+        [ modal.isActive
+          prop.children
+            [ Bulma.modalBackground []
+              Bulma.modalCard
+                [ Bulma.modalCardHead [ Bulma.title.h3 "Game Over" ]
+                  Bulma.modalCardBody
+                    [ centered (Bulma.title.h4 "Congratulations!!! You made a score for the hall of fame!")
+                      centered (gameOverGif state.HappyGif)
+                      Bulma.section [ nameInput ] ]
+                  Bulma.modalCardFoot
+                    [ saveButton ] ] ] ]
+
+let gameOver state dispatch =
+    let closeButton =
+        Bulma.button.a
+            [ prop.text "Close"
+              prop.onClick (fun _ -> dispatch ConfirmGameOver)
+              button.isActive
+              color.isPrimary ]
+
+    Bulma.modal
+        [ modal.isActive
+          prop.children
+            [ Bulma.modalBackground []
+              Bulma.modalCard
+                [ Bulma.modalCardHead [ Bulma.title.h3 "Game Over" ]
+                  Bulma.modalCardBody
+                    [ centered (Bulma.title.h4 "Sadly, this time you didn't make it into Hall of Fame!")
+                      centered (gameOverGif state.SadGif) ]
+                  Bulma.modalCardFoot
+                    [ closeButton ] ] ] ]
+
+let view (state: State) (dispatch: Message -> unit) =
+    Bulma.columns [
         prop.children [
+            match state with
+            | Winner -> enterHallOfFame state dispatch
+            | Loser -> gameOver state dispatch
+            | Playing -> ()
             Bulma.column [
                 column.is6
                 prop.children [ Bulma.card [ renderScoreboard state dispatch ] ]

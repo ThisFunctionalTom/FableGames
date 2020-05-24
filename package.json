@@ -16,6 +16,7 @@
     "dependencies": {
         "bulma": "^0.8.0",
         "bulma-switch": "^2.0.0",
+        "env": "0.0.2",
         "react": "^16.13.1",
         "react-dom": "^16.13.1",
         "remotedev": "^0.2.9"
