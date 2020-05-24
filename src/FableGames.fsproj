@@ -16,5 +16,18 @@
     <Compile Include="State.fs" />
     <Compile Include="App.fs" />
   </ItemGroup>
-  <Import Project="..\.paket\Paket.Restore.targets" />
+  <ItemGroup>
+    <PackageReference Include="Fable.Core" Version="3.1.5" />
+    <PackageReference Include="Fable.Elmish.Browser" Version="3.0.4" />
+    <PackageReference Include="Fable.Elmish.Debugger" Version="3.2.0" />
+    <PackageReference Include="Fable.Elmish.HMR" Version="4.0.1" />
+    <PackageReference Include="Fable.Elmish.React" Version="3.0.1" />
+    <PackageReference Include="Fable.FontAwesome.Free" Version="2.1.0" />
+    <PackageReference Include="Fable.SimpleHttp" Version="3.0.0" />
+    <PackageReference Include="feliz" Version="1.1.0" />
+    <PackageReference Include="Feliz.Bulma" Version="2.1.0" />
+    <PackageReference Include="Feliz.Bulma.Switch" Version="1.0.0" />
+    <PackageReference Include="fulma" Version="2.8.1" />
+    <PackageReference Include="Zanaptak.TypedCssClasses" Version="0.2.0" />
+  </ItemGroup>
 </Project>
